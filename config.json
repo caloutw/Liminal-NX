@@ -1,0 +1,16 @@
+{
+    "port": 3000,
+    "folder": "/home/calou/workspace/web",
+    "mjslife": {
+        "MAX_RAM_SIZE": 128,
+        "MAX_REQUEST": 300,
+        "MAX_LIFE_TIME": 30,
+        "ERROR_DISPLAY": true
+    },
+    "connectlife": {
+        "REQUSET_THRESHOLD_TIME_s": 5,
+        "MAX_REQUEST_s": 20,
+        "BLOCK_TIME_s": 60,
+        "MAX_PACKAGE_SIZE": 16384
+    }
+}
