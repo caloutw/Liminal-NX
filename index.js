@@ -6,6 +6,7 @@ import path from 'node:path';
 import { ExJSB } from 'exjsb';
 
 import config from "./config.json" with { type: "json" };
+import { isRegExp } from 'node:util/types';
 let httpClient;
 
 function main() {
@@ -17,7 +18,7 @@ function main() {
     cluster.setupPrimary({
         execArgv: [`--expose-gc`, `--experimental-vm-modules`, `--disable-warning=ExperimentalWarning`, `--max-old-space-size=${config.mjslife.MAX_RAM_SIZE}`]
     });
-    
+
 
     //列隊
     let mjsQueue = [];
@@ -87,7 +88,7 @@ function main() {
             if (!["GET", "POST", "HEAD", "PUT", "DELETE", "CONNECT", "OPTIONS", "TRACE", "PATCH"].includes(requestHead[0])) { respondWithCode(405); return; }
 
             /* ====================
-            |       檢查路徑       |
+            |       細化標頭       |
             ==================== */
 
             //定義各種變數
@@ -95,31 +96,166 @@ function main() {
                 requestUrl = requestHead[1].split("?")[0].replace(/\/{2,}/gm, "/"),
                 requestParameter = requestHead[1].split("?")[1],
                 isUrlSlashed = requestUrl.endsWith("/");
-            let isFile = false;
 
-            //先尋找是否是檔案，如果找不到，直接404
-            try { if (fs.statSync(path.join(config.folder, requestUrl)).isFile()) isFile = true } catch { respondWithCode(404); return; };
+            let
+                pointUrl = requestUrl,
+                pathArray = requestUrl.split("/").slice(0, isUrlSlashed ? -1 : undefined),
+                isFile = undefined,
+                routerList = ["index.mjs", "index.html"];
+
+            /* ====================
+            |     規則過濾替換     |
+            ==================== */
+
+            //TODO: 快取規則.
+
+            //總規則籍
+            let passfilterFull = [];
+
+            //規則專屬檔案判斷
+            const isFileForPassFilter = (() => { try { return fs.statSync(path.join(config.folder, pointUrl)).isFile() } catch { return undefined; } })();
+
+            //遞歸掃描
+            while (pathArray.length > 0) {
+                (() => { try { return JSON.parse(fs.readFileSync(path.join(config.folder, pathArray.join("/"), ".passfilter"))); } catch { return []; } })().forEach(rule => {
+                    passfilterFull.push({ ...rule, root: pathArray.join("/") });
+                });
+                pathArray.pop();
+            }
+
+            //開始逐一判斷規則
+            for (const rule of passfilterFull) {
+                //如果缺少關鍵要素就下一步
+                if (!rule["action"]) continue;
+                if (!rule["includes"]) continue;
+
+                //includes的字串合集
+                let includesToken = [];
+
+                //開始拆解includes規則
+                for (let name of rule["includes"]) {
+                    const fixedPosition = name.startsWith("/");
+                    const wildCards = name.match(/\*|\?/g) !== null;
+
+                    if (fixedPosition) name = name.slice(1);
+
+                    if (wildCards) includesToken.push({ type: "RegExp", content: new RegExp(name.replaceAll(".", "\\.").replace(/(?<!\\)\*/g, ".*").replace(/(?<!\\)\?/g, ".{1}"), "g"), fixedPosition });
+                    else includesToken.push({ type: "String", content: name, fixedPosition });
+                }
+
+                //偵測旗標
+                let findFilterFlag = false;
+
+                //開始判斷
+                for (const rulePackage of includesToken) {
+                    //左匹配 或者 尾匹配
+                    let leftMatch = false;
+
+                    //當前目錄，不包含父目錄，因為父層不套用子規則
+                    let lookupUrl = requestUrl.replace(rule["root"], "").split("/").filter(v => v !== "");
+                    if(lookupUrl.length === 0) lookupUrl = [""];
+
+                    //檢查是否是固定位置，是的話啟用左匹配
+                    if (rulePackage.fixedPosition) leftMatch = true;
+
+                    //如果是RegExp
+                    if (rulePackage.type === "RegExp") {
+                        if ((leftMatch && (lookupUrl[0].match(rulePackage.content) ?? [])[0] === lookupUrl[0]) || (!leftMatch && lookupUrl.join("/").match(rulePackage.content))) {
+                            findFilterFlag = true;
+                            break;
+                        }
+
+                        //不是檔案的話則離開
+                        if (isFileForPassFilter) continue;
+
+                        //如果都沒有，則開始查找預設路由表
+                        for (const i of routerList) {
+                            const routerUrl = path.join(config.folder, requestUrl, i);
+                            if (fs.existsSync(routerUrl) && !leftMatch && routerUrl.match(rulePackage.content)) {
+                                findFilterFlag = true;
+                                break;
+                            }
+                        }
+                    }
+
+                    //字串
+                    else if (rulePackage.type === "String") {
+                        if ((leftMatch && lookupUrl[0] === rulePackage.content) || (!leftMatch && lookupUrl.join("/").includes(rulePackage.content))) {
+                            findFilterFlag = true;
+                            break;
+                        }
+
+                        //不是檔案的話則離開
+                        if (isFileForPassFilter) continue;
+
+                        //如果都沒有，則開始查找預設路由表
+                        for (const i of routerList) {
+                            const routerUrl = path.join(config.folder, requestUrl, i);
+                            if (fs.existsSync(routerUrl) && !leftMatch && routerUrl.includes(rulePackage.content)) {
+                                findFilterFlag = true;
+                                break;
+                            }
+                        }
+                    }
+
+                    //給第二階段跳脫用的
+                    if (findFilterFlag) break;
+                }
+
+                //如果旗標成立了
+                if (findFilterFlag) {
+                    switch (rule["action"]) {
+                        case "pass":
+                            break;
+                        case "deny":
+                            if (typeof rule["to"] === "number") { respondWithCode(rule["to"]); return; }
+                            else if (typeof rule["to"] === "string") pointUrl = path.join(rule.root, rule["to"]);
+                            else { respondWithCode(403); return; }
+                            break;
+                        case "forward":
+                            if (typeof rule["to"] === "number") { respondWithCode(rule["to"]); return; }
+                            else if (typeof rule["to"] === "string") pointUrl = path.join(rule.root, rule["to"]);
+                            else { respondWithCode(500); return; }
+                            break;
+                        default:
+                            break;
+                    }
+
+                    break;
+                }
+            }
+
+            /* ====================
+            |       路徑確認       |
+            ==================== */
+
+            //先尋找是否是檔案
+            if (!isFile) try { isFile = fs.statSync(path.join(config.folder, pointUrl)).isFile() } catch { isFile = undefined };
 
             //如果尾端不是斜線，也不是檔案，就301導向到有斜線
-            if (!isUrlSlashed && !isFile) { respondWithCode(301, { "location": `${requestUrl}/${requestParameter ? "?" + requestParameter : ""}` }); return; }
+            if (!isUrlSlashed && isFile === false) { respondWithCode(301, { "location": `${requestUrl}/${requestParameter ? "?" + requestParameter : ""}` }); return; }
 
             //定義目標檔案
             let targetFile = isFile ? null : (() => {
-                for (const i of ["index.mjs", "index.html"]) {
-                    if (fs.existsSync(path.join(config.folder, requestUrl, i))) return i;
+                //如果沒有檔案，也不是資料夾，則後推
+                if (isFile === undefined) return null;
+
+                //開始順序查找
+                for (const i of routerList) {
+                    if (fs.existsSync(path.join(config.folder, pointUrl, i))) return i;
                 }
                 return false;
             })();
 
-            //如果找不到檔案，404
-            if (targetFile === false || (targetFile === null && !fs.existsSync(path.join(config.folder, requestUrl)))) { respondWithCode(404); return; };
-
-            //定義標準檔案位置
-            const filePath = path.join(config.folder, requestUrl, (targetFile === null ? "" : targetFile));
-
             /* ====================
             |       標準處理       |
             ==================== */
+
+            //定義標準檔案位置
+            const filePath = path.join(config.folder, pointUrl, targetFile || "");
+
+            //如果找不到檔案，404
+            if (isFile === undefined || !fs.existsSync(filePath)) { respondWithCode(404); return; };
 
             //如果後綴是 .mjs，則觸發多線程沙箱，否則走主線程回報
             if (filePath.endsWith(".mjs") && isFile) { mjsProcess(filePath, requestIp); return; }
@@ -190,6 +326,8 @@ function main() {
             };
 
             if (typeof other !== "object") other = {};
+
+            if (!statusCode[code]) code = 500;
 
             if (lockedSocket.writable && !lockedSocket.destroyed) {
                 let messagePackage = [`HTTP/1.1 ${code} ${statusCode[code]}`];
