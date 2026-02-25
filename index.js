@@ -3,11 +3,13 @@ import http from 'node:http';
 import fs from 'node:fs';
 import cluster from 'node:cluster';
 import path from 'node:path';
+import url from 'url';
 import { ExJSB } from 'exjsb';
 
 import config from "./config.json" with { type: "json" };
-import { isRegExp } from 'node:util/types';
 let httpClient;
+
+const __dirname = url.fileURLToPath(path.dirname(import.meta.url));
 
 function main() {
     /* ====================
@@ -35,6 +37,8 @@ function main() {
 
         //連線用Function
         function connection(data) {
+            if(config.folder.includes("{THIS_DIR}")) config.folder = config.folder.replaceAll("{THIS_DIR}", __dirname);
+
             /* ====================
             |     處理Head字串     |
             ==================== */
@@ -153,14 +157,13 @@ function main() {
 
                     //當前目錄，不包含父目錄，因為父層不套用子規則
                     let lookupUrl = requestUrl.replace(rule["root"], "").split("/").filter(v => v !== "");
-                    if(lookupUrl.length === 0) lookupUrl = [""];
 
                     //檢查是否是固定位置，是的話啟用左匹配
                     if (rulePackage.fixedPosition) leftMatch = true;
 
                     //如果是RegExp
                     if (rulePackage.type === "RegExp") {
-                        if ((leftMatch && (lookupUrl[0].match(rulePackage.content) ?? [])[0] === lookupUrl[0]) || (!leftMatch && lookupUrl.join("/").match(rulePackage.content))) {
+                        if ((leftMatch && lookupUrl[0] === ((lookupUrl[0].match(rulePackage.content) ?? [])[0])) || (!leftMatch && lookupUrl.join("/").match(rulePackage.content))) {
                             findFilterFlag = true;
                             break;
                         }
@@ -180,7 +183,11 @@ function main() {
 
                     //字串
                     else if (rulePackage.type === "String") {
-                        if ((leftMatch && lookupUrl[0] === rulePackage.content) || (!leftMatch && lookupUrl.join("/").includes(rulePackage.content))) {
+                        //取得網址並切割，取得長度，用於左匹配
+                        let ruleUrlLen = rulePackage.content.split("/").length;
+
+                        //進行左匹配時，會自動切割到與標準RESTful的長度進行強匹配
+                        if ((leftMatch && lookupUrl.slice(0, ruleUrlLen).join("/") === rulePackage.content) || (!leftMatch && lookupUrl.join("/").includes(rulePackage.content))) {
                             findFilterFlag = true;
                             break;
                         }
@@ -253,6 +260,9 @@ function main() {
 
             //定義標準檔案位置
             const filePath = path.join(config.folder, pointUrl, targetFile || "");
+
+            //如果是連線 .passfilter，403
+            if (isFile && filePath.endsWith(".passfilter")) { respondWithCode(403); return; };
 
             //如果找不到檔案，404
             if (isFile === undefined || !fs.existsSync(filePath)) { respondWithCode(404); return; };
