@@ -1,14 +1,13 @@
 {
   "name": "liminal-nx",
-  "version": "1.0.0",
+  "version": "1.0.6",
   "description": "",
   "license": "ISC",
   "author": "Caloutw",
   "type": "module",
   "main": "index.js",
   "scripts": {
-    "dev": "npm i&&node index.js",
-    "server": "npm i&&clear && node index.js"
+    "server": "npm i&& node index.js"
   },
   "dependencies": {
     "exjsb": "^2.0.1",

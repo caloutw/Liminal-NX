@@ -10,8 +10,11 @@ import config from "./config.json" with { type: "json" };
 let httpClient;
 
 const __dirname = url.fileURLToPath(path.dirname(import.meta.url));
+if(config.folder.includes("{THIS_DIR}")) config.folder = config.folder.replaceAll("{THIS_DIR}", __dirname);
 
 function main() {
+    console.clear();
+
     /* ====================
     |         定義         |
     ==================== */
@@ -37,8 +40,6 @@ function main() {
 
         //連線用Function
         function connection(data) {
-            if(config.folder.includes("{THIS_DIR}")) config.folder = config.folder.replaceAll("{THIS_DIR}", __dirname);
-
             /* ====================
             |     處理Head字串     |
             ==================== */
