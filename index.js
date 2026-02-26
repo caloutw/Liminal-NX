@@ -157,6 +157,7 @@ function main() {
 
                     //當前目錄，不包含父目錄，因為父層不套用子規則
                     let lookupUrl = requestUrl.replace(rule["root"], "").split("/").filter(v => v !== "");
+                    if(lookupUrl.length === 0) lookupUrl = [""];
 
                     //檢查是否是固定位置，是的話啟用左匹配
                     if (rulePackage.fixedPosition) leftMatch = true;

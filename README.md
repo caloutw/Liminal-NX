@@ -16,6 +16,7 @@
 - [x] Local `node_modules` Resolution.
 - [x] Dynamic folder config.
 - [x] RESTful with dynamic folder config.
+- [x] Add `{THIS_DIR}` on config.
 - [ ] Websocket Support.
 - [ ] A lot of optimization.
 
@@ -31,7 +32,7 @@ npm run server
 ## Config
 
 * `port`: Web server will use this port.
-* `folder`: The folder location, must be an absolute location.
+* `folder`: The folder location, must be an absolute location.(`{THIS_DIR}` resolves to the Liminal-NX root directory.)
 * `mjslife`
 - * `MAX_RAM_SIZE`: Maximum memory limit (MB) for the new MJS isolation container.
 - * `MAX_REQUEST`: Maximum queue capacity for MJS operations.
