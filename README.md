@@ -17,8 +17,9 @@
 - [x] Dynamic folder config.
 - [x] RESTful with dynamic folder config.
 - [x] Add `{THIS_DIR}` on config.
-- [ ] Websocket Support.
-- [ ] A lot of optimization.
+- [x] Websocket Support.
+- [ ] Websocket communication.
+- [ ] Websocket Ping Pong.
 
 ## Build
 ```shell
@@ -40,7 +41,7 @@ npm run server
 - * `ERROR_DISPLAY`: Display MJS runtime errors directly on the webpage.
 
 * `connectlife`
-- * `REQUSET_THRESHOLD_TIME_s`: The time frame during which requests from a single IP are tracked. If the count exceeds `MAX_REQUESTS_s`, the IP will be blacklisted.
+- * `REQUEST_THRESHOLD_TIME_s`: The time frame during which requests from a single IP are tracked. If the count exceeds `MAX_REQUESTS_s`, the IP will be blacklisted.
 - * `MAX_REQUESTS_s`: The maximum number of requests an IP can make within the specified time window before being blacklisted.
 - * `BLOCK_TIME_s`: The amount of time an IP address remains blocked after exceeding the request limit.
 - * `MAX_PACKAGE_SIZE`: The maximum size (in bytes) of all HTTP request headers.
@@ -91,7 +92,7 @@ To execute server-side logic, ensure your `.mjs` files follow the **Liminal-NX**
 
 ### File Structure
 
-Every `.mjs` file must export an `async function main(req, res)`.
+Every .mjs file must export an `async function main(req, res)` for standard HTTP requests. However, if the file acts as a WebSocket endpoint, it must export an `async function websocket(wsData, req, res)` instead.
 
 ```javascript
 // You can use ESM imports or CommonJS require
@@ -108,6 +109,21 @@ export async function main(req, res) {
     }
     
     res.end();
+}
+
+//If you need Websocket.
+export async function websocket(wsData, req, res){
+    wsData.on('data', (data) => {
+        res.write(`I Got the message: ${data}`);
+
+        if(data.toString() === "Hello"){
+            res.write("Hello"); //Send a message.
+        }
+
+        if(data.toString() === "Bye"){
+            res.close();  //End this socket.
+        }
+    })
 }
 ```
 
