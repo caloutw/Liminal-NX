@@ -1,11 +1,13 @@
 {
     "port": 3000,
-    "folder": "{THIS_DIR}/web",
+    "folder": "/home/calou/workspace/web",
     "mjslife": {
         "MAX_RAM_SIZE": 128,
         "MAX_REQUEST": 300,
         "MAX_LIFE_TIME": 30,
-        "ERROR_DISPLAY": true
+        "ERROR_DISPLAY": true,
+        "EXT_DETECT": true,
+        "WEBSOCKET": true
     },
     "connectlife": {
         "REQUSET_THRESHOLD_TIME_s": 5,
